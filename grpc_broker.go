@@ -284,27 +284,6 @@ func newGRPCBroker(s streamer, tls *tls.Config) *GRPCBroker {
 	}
 }
 
-// Accept accepts a connection by ID.
-//
-// This should not be called multiple times with the same ID at one time.
-func (b *GRPCBroker) Accept(id uint32) (net.Listener, error) {
-	listener, err := serverListener()
-	if err != nil {
-		return nil, err
-	}
-
-	err = b.streamer.Send(&plugin.ConnInfo{
-		ServiceId: id,
-		Network:   listener.Addr().Network(),
-		Address:   listener.Addr().String(),
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return listener, nil
-}
-
 // AcceptAndServe is used to accept a specific stream ID and immediately
 // serve a gRPC server on that stream ID. This is used to easily serve
 // complex arguments. Each AcceptAndServe call opens a new listener socket and
