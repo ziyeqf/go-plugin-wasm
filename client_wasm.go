@@ -474,14 +474,11 @@ func (c *Client) Start() (addr net.Addr, err error) {
 		c.config.MagicCookieKey + "=" + c.config.MagicCookieValue,
 	}
 
-	// this is only used in handshake, when the plugin is started, it will redirect its stdout and stderr to itself,
-	// and will pass on the RPC protocol.
-	stderr_r, stderr_w, err := chanio.Pipe()
 	stdout_r, stdout_w, err := chanio.Pipe()
-	_ = stderr_r
-
+	if err != nil {
+		return nil, err
+	}
 	c.workerConn.Stdout = stdout_w
-	c.workerConn.Stderr = stderr_w
 
 	c.logger.Debug("starting plugin", "path", c.workerConn.Path, "args", c.workerConn.Args)
 	if err := c.workerConn.Start(); err != nil {

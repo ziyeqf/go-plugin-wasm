@@ -189,8 +189,8 @@ func protocolVersion(opts *ServeConfig) (int, Protocol, PluginSet) {
 			// for the protocol type
 			for _, p := range pluginSet {
 				switch p.(type) {
-				//case GRPCPlugin:
-				//	protoType = ProtocolGRPC
+				case GRPCPlugin:
+					protoType = ProtocolGRPC
 				default:
 					protoType = ProtocolNetRPC
 				}
@@ -333,6 +333,7 @@ func Serve(opts *ServeConfig) {
 		listener.Addr().String(),
 		protoType,
 	)
+	os.Stdout.Sync()
 
 	jsSelf.SetWriteSync(
 		[]wasmww.MsgWriter{
@@ -375,12 +376,23 @@ func Serve(opts *ServeConfig) {
 }
 
 func serverListener(connectStr string, jsSelf *wasmww.GlobalSelfConn) (net.Listener, error) {
-	// wasmww will handle stdout and stderr and close, then it will throw other message into eventCh.
-	eventCh, cancelFn, err := jsSelf.SetupConn()
+	//eventCh, cancelFn, err := jsSelf.SetupConn()
+	s, _ := wasmww.SelfConn()
+	eventCh, cancelFn, err := s.SetupConn()
+	jsSelf.SetWriteSync(
+		[]wasmww.MsgWriter{
+			jsSelf.NewMsgWriterToConsole(),
+			jsSelf.NewMsgWriterToControllerStdout(),
+		},
+		[]wasmww.MsgWriter{
+			jsSelf.NewMsgWriterToConsole(),
+			jsSelf.NewMsgWriterToControllerStderr(),
+		},
+	)
+	//todo: not clear why, but it SetupConn() will break logger..
 	if err != nil {
 		return nil, fmt.Errorf("Error setting up wasm conn: %s\n", err)
 	}
 
 	return wasmconn.NewListener(connectStr, jsSelf.PostMessage, eventCh, cancelFn), nil
-
 }

@@ -19,8 +19,9 @@ func main() {
 	client := plugin.NewClient(&plugin.ClientConfig{
 		HandshakeConfig: shared.Handshake,
 		Plugins:         shared.PluginMap,
-		//WASMConnectStr:  "plugin-connect",
 		//Cmd:             exec.Command("sh", "-c", os.Getenv("KV_PLUGIN")),
+		WasmWorkerPath: "kv-plugin.wasm",
+		WasmWorkerName: "kv-plugin",
 		AllowedProtocols: []plugin.Protocol{
 			plugin.ProtocolGRPC},
 	})
