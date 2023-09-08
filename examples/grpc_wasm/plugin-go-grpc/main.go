@@ -24,7 +24,6 @@ func (KV) Put(key string, value []byte) error {
 func (KV) Get(key string) ([]byte, error) {
 	//return ioutil.ReadFile("kv_" + key)
 	r := "testMsg"
-	fmt.Println("return message to client", r)
 	return []byte(r), nil
 }
 

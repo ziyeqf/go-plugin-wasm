@@ -389,6 +389,8 @@ func (c *Client) Client() (ClientProtocol, error) {
 	switch c.protocol {
 	case ProtocolNetRPC:
 		c.client, err = newRPCClient(c)
+	case ProtocolGRPC:
+		c.client, err = newGRPCClient(c.doneCtx, c)
 	default:
 		return nil, fmt.Errorf("unknown server protocol: %s", c.protocol)
 	}

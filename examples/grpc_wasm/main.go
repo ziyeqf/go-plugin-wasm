@@ -43,27 +43,27 @@ func main() {
 	// We should have a KV store now! This feels like a normal interface
 	// implementation but is in fact over an RPC connection.
 	kv := raw.(shared.KV)
-	os.Args = os.Args[1:]
-	switch os.Args[0] {
-	case "get":
-		result, err := kv.Get(os.Args[1])
-		if err != nil {
-			fmt.Println("Error:", err.Error())
-			os.Exit(1)
-		}
-
-		fmt.Println(string(result))
-
-	case "put":
-		err := kv.Put(os.Args[1], []byte(os.Args[2]))
-		if err != nil {
-			fmt.Println("Error:", err.Error())
-			os.Exit(1)
-		}
-
-	default:
-		fmt.Printf("Please only use 'get' or 'put', given: %q", os.Args[0])
+	//os.Args = os.Args[1:]
+	//switch os.Args[0] {
+	//case "get":
+	result, err := kv.Get("123")
+	if err != nil {
+		fmt.Println("Error:", err.Error())
 		os.Exit(1)
 	}
+
+	fmt.Println(string(result))
+	//
+	//case "put":
+	//	err := kv.Put(os.Args[1], []byte(os.Args[2]))
+	//	if err != nil {
+	//		fmt.Println("Error:", err.Error())
+	//		os.Exit(1)
+	//	}
+
+	//default:
+	//	fmt.Printf("Please only use 'get' or 'put', given: %q", os.Args[0])
+	//	os.Exit(1)
+	//}
 	os.Exit(0)
 }

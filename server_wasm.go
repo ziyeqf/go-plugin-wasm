@@ -314,7 +314,18 @@ func Serve(opts *ServeConfig) {
 			Stderr:  stdout_r,
 			DoneCh:  doneCh,
 		}
+	case ProtocolGRPC:
+		server = &GRPCServer{
+			Plugins: pluginSet,
+			Server:  opts.GRPCServer,
+			//TLS:     tlsConfig,
+			Stdout: stdout_r,
+			Stderr: stderr_r,
+			DoneCh: doneCh,
+			logger: logger,
+		}
 	default:
+		jsSelf.ResetWriteSync()
 		panic("unknown server protocol: " + protoType)
 	}
 
