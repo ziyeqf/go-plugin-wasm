@@ -11,6 +11,7 @@ import (
 	hclog "github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/go-plugin"
 	"github.com/hashicorp/go-plugin/examples/basic/shared"
+	"github.com/magodo/go-wasmww"
 )
 
 func main() {
@@ -27,8 +28,10 @@ func main() {
 		Plugins:         pluginMap,
 		Logger:          logger,
 		Stderr:          os.Stderr,
-		WasmWorkerPath:  "/greeter.wasm",
-		WasmWorkerName:  "greeter",
+		WasmWorkerConn: &wasmww.WasmWebWorkerConn{
+			Name: "greeter",
+			Path: "/greeter.wasm",
+		},
 	})
 	defer client.Kill()
 

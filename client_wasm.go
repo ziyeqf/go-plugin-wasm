@@ -230,8 +230,7 @@ type ClientConfig struct {
 	// protocol.
 	GRPCDialOptions []grpc.DialOption
 
-	WasmWorkerPath string
-	WasmWorkerName string
+	WasmWorkerConn *wasmww.WasmWebWorkerConn
 }
 
 // ReattachConfig is used to configure a client to reattach to an
@@ -354,12 +353,9 @@ func NewClient(config *ClientConfig) (c *Client) {
 	}
 
 	c = &Client{
-		config: config,
-		logger: config.Logger,
-		workerConn: &wasmww.WasmWebWorkerConn{
-			Name: config.WasmWorkerName,
-			Path: config.WasmWorkerPath,
-		},
+		config:     config,
+		logger:     config.Logger,
+		workerConn: config.WasmWorkerConn,
 	}
 	if config.Managed {
 		managedClientsLock.Lock()
