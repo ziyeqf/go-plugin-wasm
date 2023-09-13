@@ -1,6 +1,6 @@
 module example.com/testdata
 
-go 1.21.0
+go 1.21.1
 
 replace github.com/hashicorp/go-plugin => ../
 

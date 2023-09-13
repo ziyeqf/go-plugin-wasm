@@ -277,7 +277,7 @@ func Serve(opts *ServeConfig) {
 		})
 	}
 
-	jsSelf, err := wasmww.SelfConn()
+	jsSelf, err := wasmww.NewSelfConn()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error getting self conn: %s\n", err)
 	}
@@ -346,15 +346,14 @@ func Serve(opts *ServeConfig) {
 	)
 	os.Stdout.Sync()
 
-	jsSelf.SetWriteSync(
+	wasmww.SetWriteSync(
 		[]wasmww.MsgWriter{
-			jsSelf.NewMsgWriterToIoWriter(stdout_w),
+			wasmww.NewMsgWriterToIoWriter(stdout_w),
 		},
 		[]wasmww.MsgWriter{
-			jsSelf.NewMsgWriterToIoWriter(stderr_w),
+			wasmww.NewMsgWriterToIoWriter(stderr_w),
 		},
 	)
-
 	go server.Serve(listener)
 
 	ctx := context.Background()
@@ -386,24 +385,12 @@ func Serve(opts *ServeConfig) {
 	}
 }
 
-func serverListener(connectStr string, jsSelf *wasmww.GlobalSelfConn) (net.Listener, error) {
-	//eventCh, cancelFn, err := jsSelf.SetupConn()
-	s, _ := wasmww.SelfConn()
-	eventCh, cancelFn, err := s.SetupConn()
-	jsSelf.SetWriteSync(
-		[]wasmww.MsgWriter{
-			jsSelf.NewMsgWriterToConsole(),
-			jsSelf.NewMsgWriterToControllerStdout(),
-		},
-		[]wasmww.MsgWriter{
-			jsSelf.NewMsgWriterToConsole(),
-			jsSelf.NewMsgWriterToControllerStderr(),
-		},
-	)
+func serverListener(connectStr string, jsSelf *wasmww.SelfConn) (net.Listener, error) {
+	eventCh, err := jsSelf.SetupConn()
 	//todo: not clear why, but it SetupConn() will break logger..
 	if err != nil {
 		return nil, fmt.Errorf("Error setting up wasm conn: %s\n", err)
 	}
 
-	return wasmconn.NewListener(connectStr, jsSelf.PostMessage, eventCh, cancelFn), nil
+	return wasmconn.NewListener(connectStr, jsSelf.PostMessage, eventCh, jsSelf.Close), nil
 }

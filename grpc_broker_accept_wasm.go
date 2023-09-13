@@ -14,7 +14,7 @@ import (
 // This should not be called multiple times with the same ID at one time.
 func (b *GRPCBroker) Accept(id uint32) (net.Listener, error) {
 	// todo: make compiler happy
-	jsSelf, err := wasmww.SelfConn()
+	jsSelf, err := wasmww.NewSelfConn()
 	if err != nil {
 		return nil, err
 	}
