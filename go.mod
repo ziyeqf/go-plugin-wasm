@@ -8,7 +8,7 @@ require (
 	github.com/hashicorp/yamux v0.0.0-20180604194846-3520598351bb
 	github.com/jhump/protoreflect v1.15.1
 	github.com/magodo/chanio v0.0.0-20230905063744-5f1bf45eacbc
-	github.com/magodo/go-wasmww v0.0.0-20230912131045-bd57c3c25542
+	github.com/magodo/go-wasmww v0.0.0-20230914064632-eea21c04fd19
 	github.com/mitchellh/go-testing-interface v0.0.0-20171004221916-a61a99592b77
 	github.com/oklog/run v1.0.0
 	github.com/ziyeqf/go-wasm-conn v0.0.0-20230913032811-790d31e96750
@@ -32,7 +32,7 @@ require (
 	google.golang.org/protobuf v1.28.2-0.20230222093303-bc1253ad3743 // indirect
 )
 
-replace github.com/magodo/go-wasmww => ../go-wasmww
+//replace github.com/magodo/go-wasmww => ../go-wasmww
 
 //replace github.com/magodo/chanio => ../chanio
 
