@@ -11,7 +11,7 @@ require (
 	github.com/magodo/go-wasmww v0.0.0-20230914104912-44ee4b8129d0
 	github.com/mitchellh/go-testing-interface v0.0.0-20171004221916-a61a99592b77
 	github.com/oklog/run v1.0.0
-	github.com/ziyeqf/go-wasm-conn v0.0.0-20230915090132-220740061ecc
+	github.com/ziyeqf/go-wasm-conn v0.0.0-20230915093339-995ec0c9b088
 	google.golang.org/grpc v1.38.0
 )
 
@@ -31,3 +31,5 @@ require (
 	google.golang.org/genproto v0.0.0-20200526211855-cb27e3aa2013 // indirect
 	google.golang.org/protobuf v1.28.2-0.20230222093303-bc1253ad3743 // indirect
 )
+
+//replace github.com/ziyeqf/go-wasm-conn => ../go-wasm-conn
