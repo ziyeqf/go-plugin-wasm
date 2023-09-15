@@ -11,7 +11,7 @@ require (
 	github.com/magodo/go-wasmww v0.0.0-20230914104912-44ee4b8129d0
 	github.com/mitchellh/go-testing-interface v0.0.0-20171004221916-a61a99592b77
 	github.com/oklog/run v1.0.0
-	github.com/ziyeqf/go-wasm-conn v0.0.0-20230913032811-790d31e96750
+	github.com/ziyeqf/go-wasm-conn v0.0.0-20230915090132-220740061ecc
 	google.golang.org/grpc v1.38.0
 )
 
