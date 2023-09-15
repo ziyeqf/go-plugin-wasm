@@ -31,9 +31,3 @@ require (
 	google.golang.org/genproto v0.0.0-20200526211855-cb27e3aa2013 // indirect
 	google.golang.org/protobuf v1.28.2-0.20230222093303-bc1253ad3743 // indirect
 )
-
-//replace github.com/magodo/go-wasmww => ../go-wasmww
-
-//replace github.com/magodo/chanio => ../chanio
-
-//replace github.com/ziyeqf/go-wasm-conn => ../go-wasm-conn
