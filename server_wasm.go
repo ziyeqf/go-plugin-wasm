@@ -1,28 +1,25 @@
 // Copyright (c) HashiCorp, Inc.
 // SPDX-License-Identifier: MPL-2.0
 
-//go:build !wasm
+//go:build wasm
 
 package plugin
 
 import (
 	"context"
 	"crypto/tls"
-	"crypto/x509"
-	"encoding/base64"
-	"errors"
 	"fmt"
-	"io"
-	"io/ioutil"
 	"net"
 	"os"
-	"os/signal"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
 
 	hclog "github.com/hashicorp/go-hclog"
+	"github.com/magodo/chanio"
+	"github.com/magodo/go-wasmww"
+	"github.com/ziyeqf/go-wasm-conn"
+
 	"google.golang.org/grpc"
 )
 
@@ -102,6 +99,8 @@ type ServeConfig struct {
 	//   * Connection information will not be sent to stdout
 	//
 	Test *ServeTestConfig
+
+	WASMConnectStr string
 }
 
 // ServeTestConfig configures plugin serving for test mode. See ServeConfig.Test.
@@ -260,8 +259,12 @@ func Serve(opts *ServeConfig) {
 		}
 	}
 
-	// negotiate the version and plugins
-	// start with default version in the handshake config
+	if opts.WASMConnectStr == "" {
+		fmt.Fprintf(os.Stderr, "WASMConnectStr must be set.")
+		exitCode = 1
+		return
+	}
+
 	protoVersion, protoType, pluginSet := protocolVersion(opts)
 
 	logger := opts.Logger
@@ -274,8 +277,13 @@ func Serve(opts *ServeConfig) {
 		})
 	}
 
+	jsSelf, err := wasmww.NewSelfConn()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error getting self conn: %s\n", err)
+	}
+
 	// Register a listener so we can accept a connection
-	listener, err := serverListener()
+	listener, err := serverListener(opts.WASMConnectStr, jsSelf)
 	if err != nil {
 		logger.Error("plugin init error", "error", err)
 		return
@@ -287,113 +295,37 @@ func Serve(opts *ServeConfig) {
 		listener.Close()
 	}()
 
-	var tlsConfig *tls.Config
-	if opts.TLSProvider != nil {
-		tlsConfig, err = opts.TLSProvider()
-		if err != nil {
-			logger.Error("plugin tls init", "error", err)
-			return
-		}
-	}
-
-	var serverCert string
-	clientCert := os.Getenv("PLUGIN_CLIENT_CERT")
-	// If the client is configured using AutoMTLS, the certificate will be here,
-	// and we need to generate our own in response.
-	if tlsConfig == nil && clientCert != "" {
-		logger.Info("configuring server automatic mTLS")
-		clientCertPool := x509.NewCertPool()
-		if !clientCertPool.AppendCertsFromPEM([]byte(clientCert)) {
-			logger.Error("client cert provided but failed to parse", "cert", clientCert)
-		}
-
-		certPEM, keyPEM, err := generateCert()
-		if err != nil {
-			logger.Error("failed to generate server certificate", "error", err)
-			panic(err)
-		}
-
-		cert, err := tls.X509KeyPair(certPEM, keyPEM)
-		if err != nil {
-			logger.Error("failed to parse server certificate", "error", err)
-			panic(err)
-		}
-
-		tlsConfig = &tls.Config{
-			Certificates: []tls.Certificate{cert},
-			ClientAuth:   tls.RequireAndVerifyClientCert,
-			ClientCAs:    clientCertPool,
-			MinVersion:   tls.VersionTLS12,
-			RootCAs:      clientCertPool,
-			ServerName:   "localhost",
-		}
-
-		// We send back the raw leaf cert data for the client rather than the
-		// PEM, since the protocol can't handle newlines.
-		serverCert = base64.RawStdEncoding.EncodeToString(cert.Certificate[0])
-	}
-
 	// Create the channel to tell us when we're done
 	doneCh := make(chan struct{})
 
 	// Create our new stdout, stderr files. These will override our built-in
 	// stdout/stderr so that it works across the stream boundary.
-	var stdout_r, stderr_r io.Reader
-	stdout_r, stdout_w, err := os.Pipe()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error preparing plugin: %s\n", err)
-		os.Exit(1)
-	}
-	stderr_r, stderr_w, err := os.Pipe()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error preparing plugin: %s\n", err)
-		os.Exit(1)
-	}
-
-	// If we're in test mode, we tee off the reader and write the data
-	// as-is to our normal Stdout and Stderr so that they continue working
-	// while stdio works. This is because in test mode, we assume we're running
-	// in `go test` or some equivalent and we want output to go to standard
-	// locations.
-	if opts.Test != nil {
-		// TODO(mitchellh): This isn't super ideal because a TeeReader
-		// only works if the reader side is actively read. If we never
-		// connect via a plugin client, the output still gets swallowed.
-		stdout_r = io.TeeReader(stdout_r, os.Stdout)
-		stderr_r = io.TeeReader(stderr_r, os.Stderr)
-	}
+	stderr_r, stderr_w, err := chanio.Pipe()
+	stdout_r, stdout_w, err := chanio.Pipe()
 
 	// Build the server type
 	var server ServerProtocol
 	switch protoType {
 	case ProtocolNetRPC:
-		// If we have a TLS configuration then we wrap the listener
-		// ourselves and do it at that level.
-		if tlsConfig != nil {
-			listener = tls.NewListener(listener, tlsConfig)
-		}
-
 		// Create the RPC server to dispense
 		server = &RPCServer{
 			Plugins: pluginSet,
-			Stdout:  stdout_r,
-			Stderr:  stderr_r,
+			Stdout:  stderr_r,
+			Stderr:  stdout_r,
 			DoneCh:  doneCh,
 		}
-
 	case ProtocolGRPC:
-		// Create the gRPC server
 		server = &GRPCServer{
 			Plugins: pluginSet,
 			Server:  opts.GRPCServer,
-			TLS:     tlsConfig,
-			Stdout:  stdout_r,
-			Stderr:  stderr_r,
-			DoneCh:  doneCh,
-			logger:  logger,
+			//TLS:     tlsConfig,
+			Stdout: stdout_r,
+			Stderr: stderr_r,
+			DoneCh: doneCh,
+			logger: logger,
 		}
-
 	default:
+		jsSelf.ResetWriteSync()
 		panic("unknown server protocol: " + protoType)
 	}
 
@@ -405,68 +337,23 @@ func Serve(opts *ServeConfig) {
 
 	logger.Debug("plugin address", "network", listener.Addr().Network(), "address", listener.Addr().String())
 
-	// Output the address and service name to stdout so that the client can
-	// bring it up. In test mode, we don't do this because clients will
-	// attach via a reattach config.
-	if opts.Test == nil {
-		fmt.Printf("%d|%d|%s|%s|%s|%s\n",
-			CoreProtocolVersion,
-			protoVersion,
-			listener.Addr().Network(),
-			listener.Addr().String(),
-			protoType,
-			serverCert)
-		os.Stdout.Sync()
-	} else if ch := opts.Test.ReattachConfigCh; ch != nil {
-		// Send back the reattach config that can be used. This isn't
-		// quite ready if they connect immediately but the client should
-		// retry a few times.
-		ch <- &ReattachConfig{
-			Protocol:        protoType,
-			ProtocolVersion: protoVersion,
-			Addr:            listener.Addr(),
-			Pid:             os.Getpid(),
-			Test:            true,
-		}
-	}
+	fmt.Printf("%d|%d|%s|%s|%s\n",
+		CoreProtocolVersion,
+		protoVersion,
+		listener.Addr().Network(),
+		listener.Addr().String(),
+		protoType,
+	)
+	os.Stdout.Sync()
 
-	// Eat the interrupts. In test mode we disable this so that go test
-	// can be cancelled properly.
-	if opts.Test == nil {
-		ch := make(chan os.Signal, 1)
-		signal.Notify(ch, os.Interrupt)
-		go func() {
-			count := 0
-			for {
-				<-ch
-				count++
-				logger.Trace("plugin received interrupt signal, ignoring", "count", count)
-			}
-		}()
-	}
-
-	// Set our stdout, stderr to the stdio stream that clients can retrieve
-	// using ClientConfig.SyncStdout/err. We only do this for non-test mode
-	// or if the test mode explicitly requests it.
-	//
-	// In test mode, we use a multiwriter so that the data continues going
-	// to the normal stdout/stderr so output can show up in test logs. We
-	// also send to the stdio stream so that clients can continue working
-	// if they depend on that.
-	if opts.Test == nil || opts.Test.SyncStdio {
-		if opts.Test != nil {
-			// In test mode we need to maintain the original values so we can
-			// reset it.
-			defer func(out, err *os.File) {
-				os.Stdout = out
-				os.Stderr = err
-			}(os.Stdout, os.Stderr)
-		}
-		os.Stdout = stdout_w
-		os.Stderr = stderr_w
-	}
-
-	// Accept connections and wait for completion
+	wasmww.SetWriteSync(
+		[]wasmww.MsgWriter{
+			wasmww.NewMsgWriterToIoWriter(stdout_w),
+		},
+		[]wasmww.MsgWriter{
+			wasmww.NewMsgWriterToIoWriter(stderr_w),
+		},
+	)
 	go server.Serve(listener)
 
 	ctx := context.Background()
@@ -483,9 +370,9 @@ func Serve(opts *ServeConfig) {
 		// If this is a grpc server, then we also ask the server itself to
 		// end which will kill all connections. There isn't an easy way to do
 		// this for net/rpc currently but net/rpc is more and more unused.
-		if s, ok := server.(*GRPCServer); ok {
-			s.Stop()
-		}
+		//if s, ok := server.(*GRPCServer); ok {
+		//	s.Stop()
+		//}
 
 		// Wait for the server itself to shut down
 		<-doneCh
@@ -498,99 +385,11 @@ func Serve(opts *ServeConfig) {
 	}
 }
 
-func serverListener() (net.Listener, error) {
-	if runtime.GOOS == "windows" {
-		return serverListener_tcp()
-	}
-
-	return serverListener_unix()
-}
-
-func serverListener_tcp() (net.Listener, error) {
-	envMinPort := os.Getenv("PLUGIN_MIN_PORT")
-	envMaxPort := os.Getenv("PLUGIN_MAX_PORT")
-
-	var minPort, maxPort int64
-	var err error
-
-	switch {
-	case len(envMinPort) == 0:
-		minPort = 0
-	default:
-		minPort, err = strconv.ParseInt(envMinPort, 10, 32)
-		if err != nil {
-			return nil, fmt.Errorf("Couldn't get value from PLUGIN_MIN_PORT: %v", err)
-		}
-	}
-
-	switch {
-	case len(envMaxPort) == 0:
-		maxPort = 0
-	default:
-		maxPort, err = strconv.ParseInt(envMaxPort, 10, 32)
-		if err != nil {
-			return nil, fmt.Errorf("Couldn't get value from PLUGIN_MAX_PORT: %v", err)
-		}
-	}
-
-	if minPort > maxPort {
-		return nil, fmt.Errorf("PLUGIN_MIN_PORT value of %d is greater than PLUGIN_MAX_PORT value of %d", minPort, maxPort)
-	}
-
-	for port := minPort; port <= maxPort; port++ {
-		address := fmt.Sprintf("127.0.0.1:%d", port)
-		listener, err := net.Listen("tcp", address)
-		if err == nil {
-			return listener, nil
-		}
-	}
-
-	return nil, errors.New("Couldn't bind plugin TCP listener")
-}
-
-func serverListener_unix() (net.Listener, error) {
-	tf, err := ioutil.TempFile("", "plugin")
+func serverListener(connectStr string, jsSelf *wasmww.SelfConn) (net.Listener, error) {
+	eventCh, err := jsSelf.SetupConn()
 	if err != nil {
-		return nil, err
-	}
-	path := tf.Name()
-
-	// Close the file and remove it because it has to not exist for
-	// the domain socket.
-	if err := tf.Close(); err != nil {
-		return nil, err
-	}
-	if err := os.Remove(path); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Error setting up wasm conn: %s\n", err)
 	}
 
-	l, err := net.Listen("unix", path)
-	if err != nil {
-		return nil, err
-	}
-
-	// Wrap the listener in rmListener so that the Unix domain socket file
-	// is removed on close.
-	return &rmListener{
-		Listener: l,
-		Path:     path,
-	}, nil
-}
-
-// rmListener is an implementation of net.Listener that forwards most
-// calls to the listener but also removes a file as part of the close. We
-// use this to cleanup the unix domain socket on close.
-type rmListener struct {
-	net.Listener
-	Path string
-}
-
-func (l *rmListener) Close() error {
-	// Close the listener itself
-	if err := l.Listener.Close(); err != nil {
-		return err
-	}
-
-	// Remove the file
-	return os.Remove(l.Path)
+	return wasmconn.NewListener(connectStr, jsSelf.PostMessage, eventCh, jsSelf.Close), nil
 }
